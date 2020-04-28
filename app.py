@@ -43,7 +43,8 @@ class Venue(db.Model):
     website = db.Column(db.String(120))
     image_link = db.Column(db.String(500))
     facebook_link = db.Column(db.String(120))
-    show_id = db.Column(db.Integer, db.ForeignKey('Show.id'))
+    shows = db.relationship('Show', backref='venue', lazy=True)
+
 
 class Artist(db.Model):
     __tablename__ = 'Artist'
@@ -57,7 +58,8 @@ class Artist(db.Model):
     image_link = db.Column(db.String(500))
     website = db.Column(db.String(120))
     facebook_link = db.Column(db.String(120))
-    show_id = db.Column(db.Integer, db.ForeignKey('Show.id'))
+    show = db.relationship('Show', backref='artist', lazy=True)
+
 
 
 # TODO Implement Show and Artist models, and complete all model relationships and properties, as a database migration.
@@ -67,9 +69,8 @@ class Show(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.DateTime)
-    artist = db.relationship('Artist', backref='show', lazy=True)
-    venue = db.relationship('Venue', backref='show', lazy=True)
-
+    artist_id = db.Column(db.Integer, db.ForeignKey('Artist.id'))
+    venue_id = db.Column(db.Integer, db.ForeignKey('Venue.id'))
 # ----------------------------------------------------------------------------#
 # Filters.
 # ----------------------------------------------------------------------------#
@@ -100,7 +101,6 @@ def index():
 
 @app.route('/venues')
 def venues():
-    # TODO num_shows should be aggregated based on number of upcoming shows per venue.
 
     # Retrieve data from DB and sort it by City, State
     data = Venue.query.all()
@@ -149,7 +149,6 @@ def create_venue_form():
 
 @app.route('/venues/create', methods=['POST'])
 def create_venue_submission():
-    # TODO: modify data to be the data object returned from db insertion
     try:
         form = request.form
         venue = Venue(name=form['name'], city=form['city'], state=form['state'],
@@ -302,7 +301,6 @@ def create_artist_form():
 @app.route('/artists/create', methods=['POST'])
 def create_artist_submission():
     # called upon submitting the new artist listing form
-    # TODO: modify data to be the data object returned from db insertion
     try:
         form = request.form
         artist = Artist(name=form['name'], city=form['city'], state=form['state'],
@@ -327,28 +325,18 @@ def create_artist_submission():
 @app.route('/shows')
 def shows():
     # displays list of shows at /shows
-    # TODO: replace with real venues data.
-    #       num_shows should be aggregated based on number of upcoming shows per venue.
-    data2 = [{
-        "venue_id": 1,
-        "venue_name": "The Musical Hop",
-        "artist_id": 4,
-        "artist_name": "Guns N Petals",
-        "artist_image_link": "https://images.unsplash.com/photo-1549213783-8284d0336c4f?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=300&q=80",
-        "start_time": "2019-05-21T21:30:00.000Z"
-    }]
-    data=[]
-    shows = Show.query.all()
-    for show in shows:
-        data.append({
-            "venue_id": show.venue.id,
+    shows=[]
+    data = Show.query.all()
+    for show in data:
+        shows.append({
+            "venue_id": show.venue_id,
             "venue_name": show.venue.name,
-            "artist_id": show.artist.id,
+            "artist_id": show.artist_id,
             "artist_name": show.artist.name,
             "artist_image_link": show.artist.image_link,
-            "start_time": show.date
+            "start_time": str(show.date)
         })
-    return render_template('pages/shows.html', shows=data)
+    return render_template('pages/shows.html', shows=shows)
 
 
 @app.route('/shows/create')
@@ -362,11 +350,8 @@ def create_shows():
 def create_show_submission():
     #try:
     form = request.form
-    artist = Artist.query.get(form['artist_id'])
-    venue = Venue.query.get(form['venue_id'])
-    print(artist)
-    print(venue)
-    show = Show(date=form['start_time'], artist=[artist], venue=[venue])
+    print(form['venue_id'])
+    show = Show(date=form['start_time'], artist_id=int(form['artist_id']), venue_id=int(form['venue_id']))
     db.session.add(show)
     db.session.commit()
     # on successful db insert, flash success
