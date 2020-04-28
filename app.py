@@ -11,6 +11,10 @@ from flask_sqlalchemy import SQLAlchemy
 import logging
 from logging import Formatter, FileHandler
 from flask_wtf import Form
+from sqlalchemy import func
+from sqlalchemy.orm import defer, undefer
+from sqlalchemy.sql.functions import now
+
 from forms import *
 from flask_migrate import Migrate
 
@@ -61,7 +65,6 @@ class Artist(db.Model):
     show = db.relationship('Show', backref='artist', lazy=True)
 
 
-
 # TODO Implement Show and Artist models, and complete all model relationships and properties, as a database migration.
 
 class Show(db.Model):
@@ -71,6 +74,8 @@ class Show(db.Model):
     date = db.Column(db.DateTime)
     artist_id = db.Column(db.Integer, db.ForeignKey('Artist.id'))
     venue_id = db.Column(db.Integer, db.ForeignKey('Venue.id'))
+
+
 # ----------------------------------------------------------------------------#
 # Filters.
 # ----------------------------------------------------------------------------#
@@ -88,6 +93,36 @@ app.jinja_env.filters['datetime'] = format_datetime
 
 
 # ----------------------------------------------------------------------------#
+# Utils.
+# ----------------------------------------------------------------------------#
+
+# implement a counter on the number of upcoming shows
+def upcoming_shows_counter(venue_id):
+    counter = 0
+    shows = Show.query.filter_by(venue_id=venue_id)
+    for show in shows:
+        if show.date >= datetime.now():
+            counter += 1
+    return counter
+
+
+# implement a basic name search function takes a query and a search term as arguments
+def basic_name_search(query, search_term):
+    search_hits = []
+    search_term = search_term.strip().lower()
+    for row in query:
+        name = row.name.lower()
+        hit = name.find(search_term)
+        if hit != -1:
+            search_hits.append({
+                'id': row.id,
+                'name': row.name,
+                'num_upcoming_shows': upcoming_shows_counter(row.id)
+            })
+    return search_hits
+
+
+# ----------------------------------------------------------------------------#
 # Controllers.
 # ----------------------------------------------------------------------------#
 
@@ -101,7 +136,6 @@ def index():
 
 @app.route('/venues')
 def venues():
-
     # Retrieve data from DB and sort it by City, State
     data = Venue.query.all()
     areas = {}
@@ -116,19 +150,19 @@ def venues():
 
 @app.route('/venues/search', methods=['POST'])
 def search_venues():
-    # TODO: implement search on artists with partial string search. Ensure it is case-insensitive.
-    # seach for Hop should return "The Musical Hop".
-    # search for "Music" should return "The Musical Hop" and "Park Square Live Music & Coffee"
-    response = {
-        "count": 1,
-        "data": [{
-            "id": 2,
-            "name": "The Dueling Pianos Bar",
-            "num_upcoming_shows": 0,
-        }]
-    }
+
+    search_term = request.form['search_term']
+
+    # Query only venue IDs and names and perform a search on the Python objects rather than the database
+    venues = Venue.query.options(defer('*'), undefer("id"), undefer("name"))
+
+    search = basic_name_search(venues, search_term)
+    response = {}
+    response['count'] = len(search)
+    response['data'] = search
+
     return render_template('pages/search_venues.html', results=response,
-                           search_term=request.form.get('search_term', ''))
+                           search_term=search_term)
 
 
 @app.route('/venues/<int:venue_id>')
@@ -198,19 +232,19 @@ def artists():
 
 @app.route('/artists/search', methods=['POST'])
 def search_artists():
-    # TODO: implement search on artists with partial string search. Ensure it is case-insensitive.
-    # seach for "A" should return "Guns N Petals", "Matt Quevado", and "The Wild Sax Band".
-    # search for "band" should return "The Wild Sax Band".
-    response = {
-        "count": 1,
-        "data": [{
-            "id": 4,
-            "name": "Guns N Petals",
-            "num_upcoming_shows": 0,
-        }]
-    }
-    return render_template('pages/search_artists.html', results=response,
-                           search_term=request.form.get('search_term', ''))
+
+    search_term = request.form['search_term']
+
+    # Query only venue IDs and names and perform a search on the Python objects rather than the database
+    artists = Artist.query.options(defer('*'), undefer("id"), undefer("name"))
+
+    search = basic_name_search(artists, search_term)
+    response = {}
+    response['count'] = len(search)
+    response['data'] = search
+
+    return render_template('pages/search_venues.html', results=response,
+                           search_term=search_term)
 
 
 @app.route('/artists/<int:artist_id>')
@@ -325,7 +359,7 @@ def create_artist_submission():
 @app.route('/shows')
 def shows():
     # displays list of shows at /shows
-    shows=[]
+    shows = []
     data = Show.query.all()
     for show in data:
         shows.append({
@@ -348,20 +382,27 @@ def create_shows():
 
 @app.route('/shows/create', methods=['POST'])
 def create_show_submission():
-    #try:
     form = request.form
-    print(form['venue_id'])
-    show = Show(date=form['start_time'], artist_id=int(form['artist_id']), venue_id=int(form['venue_id']))
-    db.session.add(show)
-    db.session.commit()
-    # on successful db insert, flash success
-    flash('Show was successfully listed!')
-    #except (RuntimeError, TypeError, NameError):
-     #   db.session.rollback()
-     #   flash('An error occurred. Show could not be listed.')
-    #finally:
-     #   db.session.close()
+    artist_id = form['artist_id']
+    venue_id = form['venue_id']
 
+    ## Check if the artist and venue IDs exist, if not return flash messages
+    artist_exists = Artist.query.get(artist_id)
+    venue_exists = Venue.query.get(venue_id)
+
+    if artist_exists and venue_exists:
+        show = Show(date=form['start_time'], artist_id=artist_id, venue_id=venue_id)
+        db.session.add(show)
+        db.session.commit()
+        # on successful db insert, flash success
+        flash('Show was successfully listed!')
+    else:
+        if artist_exists is None:
+            flash('Artist ID not found')
+        if venue_exists is None:
+            flash('Venue ID not found')
+        render_form = ShowForm()
+        return render_template('forms/new_show.html', form=render_form)
     return render_template('pages/home.html')
 
 
