@@ -102,12 +102,18 @@ app.jinja_env.filters['datetime'] = format_datetime
 # ----------------------------------------------------------------------------#
 
 # implement a counter on the number of upcoming shows
-def upcoming_shows_counter(venue_id):
+def upcoming_shows_counter(id, param):
     counter = 0
-    shows = Show.query.filter_by(venue_id=venue_id)
-    for show in shows:
-        if show.date >= datetime.now():
-            counter += 1
+    if param == 'artist':
+        shows = Show.query.filter_by(artist_id=id)
+        for show in shows:
+            if show.date >= datetime.now():
+                counter += 1
+    if param == 'venue':
+        shows = Show.query.filter_by(venue_id=id)
+        for show in shows:
+            if show.date >= datetime.now():
+               counter += 1
     return counter
 
 
@@ -261,12 +267,17 @@ def search_artists():
 def show_artist(artist_id):
     # shows the venue page with the given venue_id
     join = Artist.query.outerjoin(Show).filter(Artist.id == artist_id).first()
+    join.upcoming_shows_count = upcoming_shows_counter(join.id, 'artist')
+
     return render_template('pages/show_artist.html', artist=join)
+
 
 @app.route('/test')
 def test():
     data1 = Artist.query.join(Show)
     return render_template('pages/test.html', data1=data1, time=datetime.now())
+
+
 #  Update
 #  ----------------------------------------------------------------
 @app.route('/artists/<int:artist_id>/edit', methods=['GET'])
@@ -309,6 +320,7 @@ def edit_artist_submission(artist_id):
         db.session.close()
     return redirect(url_for('show_artist', artist_id=artist_id))
 
+
 @app.route('/artists/<artist_id>/delete', methods=['POST'])
 # As HTTP does not allow DELETE method in forms, and I don't want to use any AJAX
 # I changed the endpoint for handling deletes to use post method on artist_id/delete
@@ -326,6 +338,7 @@ def delete_artist(artist_id):
     # BONUS CHALLENGE: Implement a button to delete a Venue on a Venue Page, have it so that
     # clicking that button delete it from the db then redirect the user to the homepage
     return redirect(url_for('artists'))
+
 
 @app.route('/venues/<int:venue_id>/edit', methods=['GET'])
 def edit_venue(venue_id):
