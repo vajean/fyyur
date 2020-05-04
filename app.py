@@ -47,6 +47,8 @@ class Venue(db.Model):
     website = db.Column(db.String(120))
     image_link = db.Column(db.String(500))
     facebook_link = db.Column(db.String(120))
+    seeking_talent = db.Column(db.Boolean(), nullable=True, default=False)
+    seeking_description = db.Column(db.String(250))
     shows = db.relationship('Show', backref='venue', lazy=True)
 
 
@@ -62,9 +64,12 @@ class Artist(db.Model):
     image_link = db.Column(db.String(500))
     website = db.Column(db.String(120))
     facebook_link = db.Column(db.String(120))
-    show = db.relationship('Show', backref='artist', lazy=True)
+    seeking_venue = db.Column(db.Boolean(), nullable=True, default=False)
+    seeking_description = db.Column(db.String(250))
+    shows = db.relationship('Show', backref='artist', lazy=True)
 
 
+#
 # TODO Implement Show and Artist models, and complete all model relationships and properties, as a database migration.
 
 class Show(db.Model):
@@ -150,7 +155,6 @@ def venues():
 
 @app.route('/venues/search', methods=['POST'])
 def search_venues():
-
     search_term = request.form['search_term']
 
     # Query only venue IDs and names and perform a search on the Python objects rather than the database
@@ -185,10 +189,17 @@ def create_venue_form():
 def create_venue_submission():
     try:
         form = request.form
+
+        try:
+            form['seeking_talent'] == 'y'
+            seeking = True
+        except:
+            seeking = False
         venue = Venue(name=form['name'], city=form['city'], state=form['state'],
                       address=form['address'], phone=form['phone'], genres=form.getlist('genres'),
                       facebook_link=form['facebook_link'], image_link=form['image_link'],
-                      website=form['website'])
+                      website=form['website'], seeking_talent=seeking,
+                      seeking_description=form['seeking_description'])
         db.session.add(venue)
         db.session.commit()
         # on successful db insert, flash success
@@ -232,7 +243,6 @@ def artists():
 
 @app.route('/artists/search', methods=['POST'])
 def search_artists():
-
     search_term = request.form['search_term']
 
     # Query only venue IDs and names and perform a search on the Python objects rather than the database
@@ -274,6 +284,14 @@ def edit_artist_submission(artist_id):
             if column != 'id':
                 if column == 'genres':
                     old_artist.__setattr__(column, form.getlist('genres'))
+                elif column == 'seeking_venue':
+                    # the form[seeking_venue] does not exist if not ticked, using a try to verify instead of if
+                    try:
+                        form[column] == 'y'
+                        seeking = True
+                    except:
+                        seeking = False
+                    old_artist.__setattr__(column, seeking)
                 else:
                     old_artist.__setattr__(column, form[column])
 
@@ -288,6 +306,23 @@ def edit_artist_submission(artist_id):
         db.session.close()
     return redirect(url_for('show_artist', artist_id=artist_id))
 
+@app.route('/artists/<artist_id>/delete', methods=['POST'])
+# As HTTP does not allow DELETE method in forms, and I don't want to use any AJAX
+# I changed the endpoint for handling deletes to use post method on artist_id/delete
+def delete_artist(artist_id):
+    # SQLAlchemy ORM to delete a record. Handle cases where the session commit could fail.
+    try:
+        Artist.query.filter_by(id=artist_id).delete()
+        db.session.commit()
+        flash('Venue was successfully deleted!')
+    except:
+        db.session.rollback()
+        flash('Venue not deleted!')
+    finally:
+        db.session.close()
+    # BONUS CHALLENGE: Implement a button to delete a Venue on a Venue Page, have it so that
+    # clicking that button delete it from the db then redirect the user to the homepage
+    return redirect(url_for('artists'))
 
 @app.route('/venues/<int:venue_id>/edit', methods=['GET'])
 def edit_venue(venue_id):
@@ -308,6 +343,14 @@ def edit_venue_submission(venue_id):
             if column != 'id':
                 if column == 'genres':
                     old_venue.__setattr__(column, form.getlist('genres'))
+                elif column == 'seeking_talent':
+                    # the form[seeking_talent] does not exist if not ticked, using a try to verify instead of if
+                    try:
+                        form[column] == 'y'
+                        seeking = True
+                    except:
+                        seeking = False
+                    old_venue.__setattr__(column, seeking)
                 else:
                     old_venue.__setattr__(column, form[column])
 
@@ -337,9 +380,15 @@ def create_artist_submission():
     # called upon submitting the new artist listing form
     try:
         form = request.form
+        try:
+            form['seeking_venue'] == 'y'
+            seeking = True
+        except:
+            seeking = False
         artist = Artist(name=form['name'], city=form['city'], state=form['state'],
                         phone=form['phone'], genres=form.getlist('genres'), website=form['website'],
-                        facebook_link=form['facebook_link'], image_link=form['image_link'])
+                        facebook_link=form['facebook_link'], image_link=form['image_link'],
+                        seeking_venue=seeking, seeking_description=form['seeking_description'])
         db.session.add(artist)
         db.session.commit()
         # on successful db insert, flash success
