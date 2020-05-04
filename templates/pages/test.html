@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TEST</title>
+</head>
+<body>
+
+{% for row in data1  %}
+    {{ row.name }}  {{ time }}
+    <br>
+    {%for show in row.shows%}
+        {{ show.date }}
+        {{ show.venue.name }}
+        <br>
+    {% endfor %}
+    <br>
+{% endfor %}
+
+<br>
+
+</body>
+</html>

@@ -260,10 +260,13 @@ def search_artists():
 @app.route('/artists/<int:artist_id>')
 def show_artist(artist_id):
     # shows the venue page with the given venue_id
-    data = Artist.query.filter_by(id=artist_id).all()[0]
-    return render_template('pages/show_artist.html', artist=data)
+    join = Artist.query.outerjoin(Show).filter(Artist.id == artist_id).first()
+    return render_template('pages/show_artist.html', artist=join)
 
-
+@app.route('/test')
+def test():
+    data1 = Artist.query.join(Show)
+    return render_template('pages/test.html', data1=data1, time=datetime.now())
 #  Update
 #  ----------------------------------------------------------------
 @app.route('/artists/<int:artist_id>/edit', methods=['GET'])
