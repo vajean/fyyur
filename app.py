@@ -3,6 +3,7 @@
 # ----------------------------------------------------------------------------#
 
 import json
+import itertools
 import dateutil.parser
 import babel
 from flask import Flask, render_template, request, Response, flash, redirect, url_for
@@ -69,9 +70,6 @@ class Artist(db.Model):
     shows = db.relationship('Show', backref='artist', lazy=True)
 
 
-#
-# TODO Implement Show and Artist models, and complete all model relationships and properties, as a database migration.
-
 class Show(db.Model):
     __tablename__ = 'Show'
 
@@ -113,12 +111,27 @@ def upcoming_shows_counter(id, param):
         shows = Show.query.filter_by(venue_id=id)
         for show in shows:
             if show.date >= datetime.now():
-               counter += 1
+                counter += 1
+    return counter
+
+
+def past_shows_counter(id, param):
+    counter = 0
+    if param == 'artist':
+        shows = Show.query.filter_by(artist_id=id)
+        for show in shows:
+            if show.date <= datetime.now():
+                counter += 1
+    if param == 'venue':
+        shows = Show.query.filter_by(venue_id=id)
+        for show in shows:
+            if show.date <= datetime.now():
+                counter += 1
     return counter
 
 
 # implement a basic name search function takes a query and a search term as arguments
-def basic_name_search(query, search_term):
+def basic_name_search(query, search_term, param):
     search_hits = []
     search_term = search_term.strip().lower()
     for row in query:
@@ -128,7 +141,7 @@ def basic_name_search(query, search_term):
             search_hits.append({
                 'id': row.id,
                 'name': row.name,
-                'num_upcoming_shows': upcoming_shows_counter(row.id)
+                'num_upcoming_shows': upcoming_shows_counter(row.id, param)
             })
     return search_hits
 
@@ -139,7 +152,9 @@ def basic_name_search(query, search_term):
 
 @app.route('/')
 def index():
-    return render_template('pages/home.html')
+    latest_artists = Artist.query.order_by(Artist.id.desc()).limit(10)
+    latest_venues = Venue.query.order_by(Venue.id.desc()).limit(10)
+    return render_template('pages/home.html', latest_artists = latest_artists, latest_venues=latest_venues)
 
 
 #  Venues
@@ -162,11 +177,10 @@ def venues():
 @app.route('/venues/search', methods=['POST'])
 def search_venues():
     search_term = request.form['search_term']
-
     # Query only venue IDs and names and perform a search on the Python objects rather than the database
     venues = Venue.query.options(defer('*'), undefer("id"), undefer("name"))
 
-    search = basic_name_search(venues, search_term)
+    search = basic_name_search(venues, search_term, 'venue')
     response = {}
     response['count'] = len(search)
     response['data'] = search
@@ -178,8 +192,13 @@ def search_venues():
 @app.route('/venues/<int:venue_id>')
 def show_venue(venue_id):
     # shows the venue page with the given venue_id
-    data = Venue.query.get(venue_id)
-    return render_template('pages/show_venue.html', venue=data)
+    join = Venue.query.outerjoin(Show).filter(Venue.id == venue_id).first()
+    join.upcoming_shows = [show for show in join.shows if show.date >= datetime.now()]
+    join.upcoming_shows_count = upcoming_shows_counter(join.id, 'venue')
+    join.past_shows_count = past_shows_counter(join.id, 'venue')
+    join.past_shows = [show for show in join.shows if show.date <= datetime.now()]
+    return render_template('pages/show_venue.html', venue=join)
+
 
 
 #  Create Venue
@@ -254,7 +273,7 @@ def search_artists():
     # Query only venue IDs and names and perform a search on the Python objects rather than the database
     artists = Artist.query.options(defer('*'), undefer("id"), undefer("name"))
 
-    search = basic_name_search(artists, search_term)
+    search = basic_name_search(artists, search_term, 'artist')
     response = {}
     response['count'] = len(search)
     response['data'] = search
@@ -267,8 +286,10 @@ def search_artists():
 def show_artist(artist_id):
     # shows the venue page with the given venue_id
     join = Artist.query.outerjoin(Show).filter(Artist.id == artist_id).first()
+    join.upcoming_shows = [show for show in join.shows if show.date >= datetime.now()]
     join.upcoming_shows_count = upcoming_shows_counter(join.id, 'artist')
-
+    join.past_shows_count = past_shows_counter(join.id, 'artist')
+    join.past_shows = [show for show in join.shows if show.date <= datetime.now()]
     return render_template('pages/show_artist.html', artist=join)
 
 
