@@ -146,6 +146,37 @@ def basic_name_search(query, search_term, param):
     return search_hits
 
 
+# search function that looks for city and state matches
+# allows for city and state search (works with or without the coma)
+# aswell only city search
+
+def location_search(query, search_term, param):
+    search_hits = []
+    search_term = search_term.lower().split()
+    search_city = search_term[0].strip(',')
+    if len(search_term) != 1:
+        search_state = search_term[1]
+        for row in query:
+            city = row.city.lower()
+            state = row.state.lower()
+            if search_city == city and search_state == state:
+                search_hits.append({
+                    'id': row.id,
+                    'name': row.name,
+                    'num_upcoming_shows': upcoming_shows_counter(row.id, param)
+                })
+    else:
+        for row in query:
+            city = row.city.lower()
+            if search_city == city:
+                search_hits.append({
+                    'id': row.id,
+                    'name': row.name,
+                    'num_upcoming_shows': upcoming_shows_counter(row.id, param)
+                })
+    return search_hits
+
+
 # ----------------------------------------------------------------------------#
 # Controllers.
 # ----------------------------------------------------------------------------#
@@ -154,7 +185,7 @@ def basic_name_search(query, search_term, param):
 def index():
     latest_artists = Artist.query.order_by(Artist.id.desc()).limit(10)
     latest_venues = Venue.query.order_by(Venue.id.desc()).limit(10)
-    return render_template('pages/home.html', latest_artists = latest_artists, latest_venues=latest_venues)
+    return render_template('pages/home.html', latest_artists=latest_artists, latest_venues=latest_venues)
 
 
 #  Venues
@@ -181,9 +212,16 @@ def search_venues():
     venues = Venue.query.options(defer('*'), undefer("id"), undefer("name"))
 
     search = basic_name_search(venues, search_term, 'venue')
-    response = {}
-    response['count'] = len(search)
-    response['data'] = search
+    # if name search returns 0 results, try city search using the same term
+    if len(search) == 0:
+        search = location_search(venues, search_term, 'venue')
+        response = {}
+        response['count'] = len(search)
+        response['data'] = search
+    else:
+        response = {}
+        response['count'] = len(search)
+        response['data'] = search
 
     return render_template('pages/search_venues.html', results=response,
                            search_term=search_term)
@@ -198,7 +236,6 @@ def show_venue(venue_id):
     join.past_shows_count = past_shows_counter(join.id, 'venue')
     join.past_shows = [show for show in join.shows if show.date <= datetime.now()]
     return render_template('pages/show_venue.html', venue=join)
-
 
 
 #  Create Venue
@@ -274,9 +311,16 @@ def search_artists():
     artists = Artist.query.options(defer('*'), undefer("id"), undefer("name"))
 
     search = basic_name_search(artists, search_term, 'artist')
-    response = {}
-    response['count'] = len(search)
-    response['data'] = search
+    #if name search returns 0 results, try city search using the same term
+    if len(search) == 0:
+        search = location_search(artists, search_term, 'artist')
+        response = {}
+        response['count'] = len(search)
+        response['data'] = search
+    else:
+        response = {}
+        response['count'] = len(search)
+        response['data'] = search
 
     return render_template('pages/search_venues.html', results=response,
                            search_term=search_term)
